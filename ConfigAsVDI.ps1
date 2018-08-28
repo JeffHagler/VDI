@@ -36,8 +36,9 @@
     .\ConfigWin10asVDI.ps1 -NoWarn $true
 .NOTES
     Author:       Carl Luberti
-    Last Update:  27th October 2016
-    Version:      1.0.6
+                  Jeff Hagler
+    Last Update:  28th August 2018
+    Version:      1.0.7
 .LOG
     1.0.1 - modified sc command to sc.exe to prevent PS from invoking set-content
     1.0.2 - modified UWP Application section to avoid issues with CopyProfile, updated onedrive removal, updated for TH2
@@ -45,6 +46,7 @@
     1.0.4 - fixed duplicates / issues in service config
     1.0.5 - updated applist for Win10 1607, moved some things out of the critical area (if you've run this before, please review!)
     1.0.6 - blocked disabling of the Device Association service, disabling service can cause logon delays on domain-joined Win10 1607 systems
+    1.0.7 - modified UWP Application section to remove Applications added in 1709 and 1803, added additional code to remove OneDrive
 #>
 
 
@@ -90,23 +92,25 @@ If ($Edition.Edition -ne "Enterprise")
 }
 
 
-# Configure Constants:
-$BranchCache = "False"
+# Configure Constants, anything set to "True" will be removed or disabled:
+$BranchCache = "True"
 $Cortana = "False"
-$DiagService = "False"
-$EAPService = "False"
-$EFS = "False"
-$FileHistoryService = "False"
-$iSCSI = "False"
+$DiagService = "True"
+$EAPService = "True"
+$EFS = "True"
+$FileHistoryService = "True"
+$iSCSI = "True"
 $MachPass = "True"
-$MSSignInService = "False"
-$OneDrive = "False"
-$PeerCache = "False"
+$MSSignInService = "True"
+$OneDrive = "True"
+$PeerCache = "True"
 $Search = "False"
-$SMB1 = "False"
-$SMBPerf = "False"
+$SMB1 = "True"
+$SMBPerf = "True"
 $Themes = "False"
-$Touch = "False"
+$Touch = "True"
+$TLS10 = "True"
+$WindowsUpdate = "True"
 
 $StartApps = "False"
 $StoreApps = "False"
@@ -382,6 +386,71 @@ If ($StartApps -eq "True")
             Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
             Remove-AppxPackage -Package $App.PackageName | Out-Null
         }
+
+        # Apps Added in 1703, 1709, and 1803
+        If ($App.DisplayName -eq "Microsoft.GetHelp")
+        {
+            Write-Host "Removing GetHelp App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.Microsoft3DViewer")
+        {
+            Write-Host "Removing Microsoft3DViewer..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.Print3D")
+        {
+            Write-Host "Removing Print3D App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.Wallet")
+        {
+            Write-Host "Removing Microsoft Wallet App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.Xbox.TCUI")
+        {
+            Write-Host "Removing Xbox TCUI App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+        
+        If ($App.DisplayName -eq "Microsoft.XboxGameOverlay")
+        {
+            Write-Host "Removing XboxGameOverlay App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.XboxGamingOverlay")
+        {
+            Write-Host "Removing Xbox GamingOverlay App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.XboxSpeechToTextOverlay")
+        {
+            Write-Host "Removing XboxSpeechToTextOverlay App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.MSPaint")
+        {
+            Write-Host "Removing MSPaint App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
     }
 
     Start-Sleep -Seconds 5
@@ -448,6 +517,7 @@ If ($OneDrive -eq "True")
     Write-Host "Removing OneDrive..." -ForegroundColor Yellow
     C:\Windows\SysWOW64\OneDriveSetup.exe /uninstall
     Start-Sleep -Seconds 30
+    reg load HKU\DefaultUser C:\users\default\ntuser.dat
     New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\' -Name 'Skydrive' | Out-Null
     New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Skydrive' -Name 'DisableFileSync' -PropertyType DWORD -Value '1' | Out-Null
     New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Skydrive' -Name 'DisableLibrariesDefaultSaveToSkyDrive' -PropertyType DWORD -Value '1' | Out-Null 
@@ -455,6 +525,9 @@ If ($OneDrive -eq "True")
     Remove-Item -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse
     Set-ItemProperty -Path 'HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0'
     Set-ItemProperty -Path 'HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0' 
+   	Remove-Itemproperty -Path 'HKU:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Run\' -name 'OneDriveSetup'
+    Reg unload HKU\DefaultUser
+
 }
 
 
@@ -511,6 +584,9 @@ Set-Service Browser -StartupType Disabled
 #Write-Host "Disabling Device Association Service..." -ForegroundColor Cyan
 #Set-Service DeviceAssociationService -StartupType Disabled
 
+Write-Host "Disabling Data Service..." -ForegroundColor Cyan
+Set-Service DusmSvc -StartupType Disabled
+
 Write-Host "Disabling Device Setup Manager Service..." -ForegroundColor Cyan
 Set-Service DsmSvc -StartupType Disabled
 
@@ -562,6 +638,9 @@ Set-Service HomeGroupListener -StartupType Disabled
 Write-Host "Disabling Home Group Provider Service..." -ForegroundColor Cyan
 Set-Service HomeGroupProvider -StartupType Disabled
 
+Write-Host "Disabling Infrared Monitoring Service..." -ForegroundColor Cyan
+Set-Service irmon -StartupType Disabled
+
 Write-Host "Disabling Internet Connection Sharing (ICS) Service..." -ForegroundColor Cyan
 Set-Service SharedAccess -StartupType Disabled
 
@@ -589,11 +668,20 @@ Set-Service CscService -StartupType Disabled
 Write-Host "Disabling Optimize drives Service..." -ForegroundColor Cyan
 Set-Service defragsvc -StartupType Disabled
 
+Write-Host "Disabling Payments and NFC/SE Manager Service..." -ForegroundColor Cyan
+Set-Service SEMgrSvc -StartupType Disabled
+
+Write-Host "Disabling Phone Service..." -ForegroundColor Cyan
+Set-Service PhoneSvc -StartupType Disabled
+
 Write-Host "Disabling Program Compatibility Assistant Service..." -ForegroundColor Cyan
 Set-Service PcaSvc -StartupType Disabled
 
 Write-Host "Disabling Quality Windows Audio Video Experience Service..." -ForegroundColor Cyan
 Set-Service QWAVE -StartupType Disabled
+
+Write-Host "Disabling Radio Management Service..." -ForegroundColor Cyan
+Set-Service RmSvc -StartupType Disabled
 
 Write-Host "Disabling Retail Demo Service..." -ForegroundColor Cyan
 Set-Service RetailDemo -StartupType Disabled
@@ -625,6 +713,9 @@ Set-Service SSDPSRV -StartupType Disabled
 Write-Host "Disabling Still Image Acquisition Events Service..." -ForegroundColor Cyan
 Set-Service WiaRpc -StartupType Disabled
 
+Write-Host "Disabling Superfetch Service..." -ForegroundColor Cyan
+Set-Service SysMain -StartupType Disabled
+
 Write-Host "Disabling Telephony Service..." -ForegroundColor Cyan
 Set-Service TapiSrv -StartupType Disabled
 
@@ -645,6 +736,9 @@ Set-Service upnphost -StartupType Disabled
 
 Write-Host "Disabling Volume Shadow Copy Service..." -ForegroundColor Cyan
 Set-Service VSS -StartupType Disabled
+
+Write-Host "Disabling Wi-Fi Direct Services Connection Manager Service..." -ForegroundColor Cyan
+Set-Service WFDSConMgrSvc -StartupType Disabled
 
 Write-Host "Disabling Windows Color System Service..." -ForegroundColor Cyan
 Set-Service WcsPlugInService -StartupType Disabled
@@ -670,11 +764,23 @@ If ($Search -eq "True")
     Set-Service WSearch -StartupType Disabled
 }
 
+If ($WindowsUpdate -eq "True")
+{
+    Write-Host "Disabling Windows Update Service..." -ForegroundColor Yellow
+    Set-Service wuauserv -StartupType Disabled
+}
+
 Write-Host "Disabling WLAN AutoConfig Service..." -ForegroundColor Cyan
 Set-Service WlanSvc -StartupType Disabled
 
 Write-Host "Disabling WWAN AutoConfig Service..." -ForegroundColor Cyan
 Set-Service WwanSvc -StartupType Disabled
+
+Write-Host "Disabling Xbox Accessory Management Service..." -ForegroundColor Cyan
+Set-Service XboxGipSvc -StartupType Disabled
+
+Write-Host "Disabling Xbox Game Monitoring Service..." -ForegroundColor Cyan
+Set-Service xbgm -StartupType Disabled
 
 Write-Host "Disabling Xbox Live Auth Manager Service..." -ForegroundColor Cyan
 Set-Service XblAuthManager -StartupType Disabled
@@ -716,9 +822,11 @@ Write-Host "Disabling Scheduled Tasks..." -ForegroundColor Cyan
 Write-Host ""
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Autochk\Proxy" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Bluetooth\UninstallDeviceTask" | Out-Null
+Disable-ScheduledTask -TaskName "\Microsoft\Windows\Defrag\ScheduledDefrag" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Diagnosis\Scheduled" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticResolver" | Out-Null
+Disable-ScheduledTask -TaskName "\Microsoft\Windows\Location\Notifications" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Maintenance\WinSAT" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Maps\MapsToastTask" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Maps\MapsUpdateTask" | Out-Null
@@ -727,10 +835,10 @@ Disable-ScheduledTask -TaskName "\Microsoft\Windows\MemoryDiagnostic\RunFullMemo
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Mobile Broadband Accounts\MNO Metadata Parser" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Ras\MobilityManager" | Out-Null
+Disable-ScheduledTask -TaskName "\Microsoft\Windows\RecoveryEnvironment\VerifyWinRE" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Registry\RegIdleBackup" | Out-Null
-Disable-ScheduledTask -TaskName "\Microsoft\Windows\RetailDemo\CleanupOfflineContent" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Shell\FamilySafetyMonitor" | Out-Null
-Disable-ScheduledTask -TaskName "\Microsoft\Windows\Shell\FamilySafetyRefresh" | Out-Null
+Disable-ScheduledTask -TaskName "\Microsoft\Windows\Shell\FamilySafetyRefreshTask" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\SystemRestore\SR" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\UPnP\UPnPHostConfig" | Out-Null
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\WDI\ResolutionHost" | Out-Null
@@ -837,6 +945,20 @@ If ($SMBPerf -eq "True")
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'EnableWsd' -PropertyType DWORD -Value '0' | Out-Null
 }
 
+
+#Remove TLS 1.0
+If ($TLS10 -eq "True")
+{
+    Write-Host "Disabling TLS 1.0..." -ForegroundColor Yellow
+    Write-Host ""
+	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'Enabled' -PropertyType DWORD -Value '0' | Out-Null
+
+	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'DisabledByDefault' -PropertyType DWORD -Value '1' | Out-Null
+
+	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'Enabled' -PropertyType DWORD -Value '0' | Out-Null
+
+	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'DisabledByDefault' -PropertyType DWORD -Value '1' | Out-Null
+}
 
 # Remove Previous Versions:
 Write-Host "Removing Previous Versions Capability..." -ForegroundColor Yellow
