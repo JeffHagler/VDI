@@ -36,9 +36,10 @@
     .\ConfigWin10asVDI.ps1 -NoWarn $true
 .NOTES
     Author:       Carl Luberti
-                  Jeff Hagler
-    Last Update:  28th August 2018
-    Version:      1.0.7
+    
+    Last Update:  Jeff Hagler 
+    Date:         6th September 2018
+    Version:      1.0.9
 .LOG
     1.0.1 - modified sc command to sc.exe to prevent PS from invoking set-content
     1.0.2 - modified UWP Application section to avoid issues with CopyProfile, updated onedrive removal, updated for TH2
@@ -46,7 +47,9 @@
     1.0.4 - fixed duplicates / issues in service config
     1.0.5 - updated applist for Win10 1607, moved some things out of the critical area (if you've run this before, please review!)
     1.0.6 - blocked disabling of the Device Association service, disabling service can cause logon delays on domain-joined Win10 1607 systems
-    1.0.7 - modified UWP Application section to remove Applications added in 1709 and 1803, added additional code to remove OneDrive
+    1.0.7 - Changed OneDrive section to remove issues plaguing 1709+ installs using Folder Redirection
+    1.0.8 - modified UWP Application section to remove Applications added in 1703, 1709, and 1803, added additional code to remove OneDrive
+	1.0.9 - enabled change validation
 #>
 
 
@@ -92,23 +95,29 @@ If ($Edition.Edition -ne "Enterprise")
 }
 
 
-# Configure Constants, anything set to "True" will be removed or disabled:
-$BranchCache = "True"
+# Get Windows 10 Release version
+$OS = (Get-Item "HKLM:SOFTWARE\Microsoft\Windows NT\CurrentVersion").GetValue('ReleaseID')
+Write-Host "This system is running Windows 10 version" $OS -ForegroundColor Green
+Write-Host ""
+
+
+# Configure Constants, anything marked "True" will be uninstalled:
+$BranchCache = "False"
 $Cortana = "False"
-$DiagService = "True"
-$EAPService = "True"
-$EFS = "True"
-$FileHistoryService = "True"
-$iSCSI = "True"
+$DiagService = "False"
+$EAPService = "False"
+$EFS = "False"
+$FileHistoryService = "False"
+$iSCSI = "False"
 $MachPass = "True"
-$MSSignInService = "True"
-$OneDrive = "True"
-$PeerCache = "True"
+$MSSignInService = "False"
+$OneDrive = "False"
+$PeerCache = "False"
 $Search = "False"
-$SMB1 = "True"
-$SMBPerf = "True"
+$SMB1 = "False"
+$SMBPerf = "False"
 $Themes = "False"
-$Touch = "True"
+$Touch = "False"
 $TLS10 = "True"
 $WindowsUpdate = "True"
 
@@ -122,6 +131,7 @@ $RDPEnable = 1
 $RDPFirewallOpen = 1
 $NLAEnable = 1
 
+$TEST = 1
 
 # Set up additional registry drives:
 New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT | Out-Null
@@ -141,6 +151,11 @@ $Apps = Get-ProvisionedAppxPackage -Online
 Write-Host "Setting VM to High Performance Power Scheme..." -ForegroundColor Green
 Write-Host ""
 POWERCFG -SetActive '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'
+$TEST = powercfg /getactivescheme
+If ($TEST -ne "Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)")
+{    Write-Host "The current Power Scheme is """ $TEST """ but it should be 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c." -ForegroundColor Red}
+Else
+{Write-Host "The current Power Scheme is correct"  -ForegroundColor Green}
 
 
 #Install NetFX3
@@ -217,7 +232,14 @@ If ($StartApps -eq "True")
             Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
             Remove-AppxPackage -Package $App.PackageName | Out-Null
         }
-
+        
+        If ($App.DisplayName -eq "Microsoft.GetHelp")
+        {
+            Write-Host "Removing GetHelp App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+        
         # Games / XBox apps
         If ($App.DisplayName -eq "Microsoft.XboxApp")
         {
@@ -250,6 +272,34 @@ If ($StartApps -eq "True")
         If ($App.DisplayName -eq "Microsoft.Microsoft.XboxIdentityProvider")
         {
             Write-Host "Removing Xbox Identity Provider helper App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+        
+        If ($App.DisplayName -eq "Microsoft.Xbox.TCUI")
+        {
+            Write-Host "Removing Xbox TCUI App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+        
+        If ($App.DisplayName -eq "Microsoft.XboxGameOverlay")
+        {
+            Write-Host "Removing XboxGameOverlay App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.XboxGamingOverlay")
+        {
+            Write-Host "Removing Xbox GamingOverlay App..." -ForegroundColor Yellow
+            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
+            Remove-AppxPackage -Package $App.PackageName | Out-Null
+        }
+
+        If ($App.DisplayName -eq "Microsoft.XboxSpeechToTextOverlay")
+        {
+            Write-Host "Removing XboxSpeechToTextOverlay App..." -ForegroundColor Yellow
             Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
             Remove-AppxPackage -Package $App.PackageName | Out-Null
         }
@@ -386,15 +436,7 @@ If ($StartApps -eq "True")
             Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
             Remove-AppxPackage -Package $App.PackageName | Out-Null
         }
-
-        # Apps Added in 1703, 1709, and 1803
-        If ($App.DisplayName -eq "Microsoft.GetHelp")
-        {
-            Write-Host "Removing GetHelp App..." -ForegroundColor Yellow
-            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
-            Remove-AppxPackage -Package $App.PackageName | Out-Null
-        }
-
+        
         If ($App.DisplayName -eq "Microsoft.Microsoft3DViewer")
         {
             Write-Host "Removing Microsoft3DViewer..." -ForegroundColor Yellow
@@ -415,42 +457,13 @@ If ($StartApps -eq "True")
             Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
             Remove-AppxPackage -Package $App.PackageName | Out-Null
         }
-
-        If ($App.DisplayName -eq "Microsoft.Xbox.TCUI")
-        {
-            Write-Host "Removing Xbox TCUI App..." -ForegroundColor Yellow
-            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
-            Remove-AppxPackage -Package $App.PackageName | Out-Null
-        }
         
-        If ($App.DisplayName -eq "Microsoft.XboxGameOverlay")
-        {
-            Write-Host "Removing XboxGameOverlay App..." -ForegroundColor Yellow
-            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
-            Remove-AppxPackage -Package $App.PackageName | Out-Null
-        }
-
-        If ($App.DisplayName -eq "Microsoft.XboxGamingOverlay")
-        {
-            Write-Host "Removing Xbox GamingOverlay App..." -ForegroundColor Yellow
-            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
-            Remove-AppxPackage -Package $App.PackageName | Out-Null
-        }
-
-        If ($App.DisplayName -eq "Microsoft.XboxSpeechToTextOverlay")
-        {
-            Write-Host "Removing XboxSpeechToTextOverlay App..." -ForegroundColor Yellow
-            Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
-            Remove-AppxPackage -Package $App.PackageName | Out-Null
-        }
-
         If ($App.DisplayName -eq "Microsoft.MSPaint")
         {
             Write-Host "Removing MSPaint App..." -ForegroundColor Yellow
             Remove-AppxProvisionedPackage -Online -PackageName $App.PackageName | Out-Null
             Remove-AppxPackage -Package $App.PackageName | Out-Null
         }
-
     }
 
     Start-Sleep -Seconds 5
@@ -499,6 +512,16 @@ If ($StartApps -eq "True")
     }
 }
 
+Write-Host "Getting a list of installed Windows Store Applications"  -ForegroundColor Magenta
+Write-Host "The only Windows Store Applications that should be present are:"  -ForegroundColor Magenta
+Write-Host ""
+Write-Host "Microsoft.WindowsAlarms"  -ForegroundColor Magenta
+Write-Host "Microsoft.WindowsCalculator"  -ForegroundColor Magenta
+Write-Host "Microsoft.WebMediaExtensions"  -ForegroundColor Magenta
+Write-Host ""
+Write-Host "The currently installed Windows Store Applications are:"  -ForegroundColor Magenta
+Get-ProvisionedAppxPackage -Online | FT DisplayName -HideTableHeaders
+
 
 # Disable Cortana:
 New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\' -Name 'Windows Search' | Out-Null
@@ -507,6 +530,11 @@ If ($Cortana -eq "True")
     Write-Host "Disabling Cortana..." -ForegroundColor Yellow
     Write-Host ""
     New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -PropertyType DWORD -Value '0' | Out-Null
+	$TEST = (Get-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search").GetValue('AllowCortana')
+	If ($TEST -eq '0')
+		{write-host "Cortana has been disabled" -ForegroundColor Green}
+		else
+		{write-host "Cortana is still enabled" -ForegroundColor Red}
 }
 
 
@@ -517,17 +545,19 @@ If ($OneDrive -eq "True")
     Write-Host "Removing OneDrive..." -ForegroundColor Yellow
     C:\Windows\SysWOW64\OneDriveSetup.exe /uninstall
     Start-Sleep -Seconds 30
-    reg load HKU\DefaultUser C:\users\default\ntuser.dat
     New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\' -Name 'Skydrive' | Out-Null
     New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Skydrive' -Name 'DisableFileSync' -PropertyType DWORD -Value '1' | Out-Null
     New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Skydrive' -Name 'DisableLibrariesDefaultSaveToSkyDrive' -PropertyType DWORD -Value '1' | Out-Null 
-    Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse
-    Remove-Item -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse
-    Set-ItemProperty -Path 'HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0'
-    Set-ItemProperty -Path 'HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0' 
-   	Remove-Itemproperty -Path 'HKU:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Run\' -name 'OneDriveSetup'
+    reg load HKU\DefaultUser C:\users\default\ntuser.dat
+    Remove-Itemproperty -Path 'HKU:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Run\' -name 'OneDriveSetup'
     Reg unload HKU\DefaultUser
-
+    If ($OS -le 1703)
+    {
+        Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse
+        Remove-Item -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse
+        Set-ItemProperty -Path 'HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0'
+        Set-ItemProperty -Path 'HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0' 
+    }
 }
 
 
@@ -537,12 +567,22 @@ If ($PeerCache -eq "True")
     Write-Host "Disabling PeerCaching..." -ForegroundColor Yellow
     Write-Host ""
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DODownloadMode' -Value '0'
+	$TEST = (Get-Item "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config").GetValue('DODownloadMode')
+	If ($TEST -eq '0')
+		{write-host "PeerCaching has been disabled" -ForegroundColor Green}
+		else
+		{write-host "PeerCaching is still enabled" -ForegroundColor Red}
 }
 Else
 {
     Write-Host "Configuring PeerCaching..." -ForegroundColor Cyan
     Write-Host ""
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DODownloadMode' -Value '1'
+	$TEST = (Get-Item "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config").GetValue('DODownloadMode')
+	If ($TEST -eq '1')
+		{write-host "PeerCaching has been configured" -ForegroundColor Green}
+		else
+		{write-host "PeerCaching has not been configured" -ForegroundColor Red}
 }
 
 
@@ -551,34 +591,80 @@ Write-Host "Configuring Services..." -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Disabling AllJoyn Router Service..." -ForegroundColor Cyan
 Set-Service AJRouter -StartupType Disabled
+$TEST = get-Service AJRouter
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
 
 Write-Host "Disabling Application Layer Gateway Service..." -ForegroundColor Cyan
 Set-Service ALG -StartupType Disabled
-
+$TEST = get-Service ALG
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Background Intelligent Transfer Service..." -ForegroundColor Cyan
 Set-Service BITS -StartupType Disabled
-
+$TEST = get-Service BITS
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Bitlocker Drive Encryption Service..." -ForegroundColor Cyan
 Set-Service BDESVC -StartupType Disabled
-
+$TEST = get-Service BDESVC
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Block Level Backup Engine Service..." -ForegroundColor Cyan
 Set-Service wbengine -StartupType Disabled
-
+$TEST = get-Service wbengine
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Bluetooth Handsfree Service..." -ForegroundColor Cyan
 Set-Service BthHFSrv -StartupType Disabled
-
+$TEST = get-Service BthHFSrv
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Bluetooth Support Service..." -ForegroundColor Cyan
 Set-Service bthserv -StartupType Disabled
-
+$TEST = get-Service bthserv
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 If ($BranchCache -eq "True")
 {
     Write-Host "Disabling BranchCache Service..." -ForegroundColor Yellow
     Set-Service PeerDistSvc -StartupType Disabled
+	$TEST = get-Service PeerDistSvc
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 Write-Host "Disabling Computer Browser Service..." -ForegroundColor Cyan
 Set-Service Browser -StartupType Disabled
-
+$TEST = get-Service Browser
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 # This service has been found in certain situations to cause logon delays on
 # Windows 10 1607 systems - disabling this service on 1507 or 1511 still works
 #Write-Host "Disabling Device Association Service..." -ForegroundColor Cyan
@@ -586,210 +672,515 @@ Set-Service Browser -StartupType Disabled
 
 Write-Host "Disabling Data Service..." -ForegroundColor Cyan
 Set-Service DusmSvc -StartupType Disabled
-
+$TEST = get-Service DusmSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Device Setup Manager Service..." -ForegroundColor Cyan
 Set-Service DsmSvc -StartupType Disabled
-
+$TEST = get-Service DsmSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Diagnostic Policy Service..." -ForegroundColor Cyan
 Set-Service DPS -StartupType Disabled
-
+$TEST = get-Service DPS
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Diagnostic Service Host Service..." -ForegroundColor Cyan
 Set-Service WdiServiceHost -StartupType Disabled
-
+$TEST = get-Service WdiServiceHost
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Diagnostic System Host Service..." -ForegroundColor Cyan
 Set-Service WdiSystemHost -StartupType Disabled
-
+$TEST = get-Service WdiSystemHost
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 If ($DiagService -eq "True")
 {
     Write-Host "Disabling Diagnostics Tracking Service..." -ForegroundColor Yellow
     Set-Service DiagTrack -StartupType Disabled
+	$TEST = get-Service DiagTrack
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 If ($EFS -eq "True")
 {
     Write-Host "Disabling Encrypting File System Service..." -ForegroundColor Yellow
     Set-Service EFS -StartupType Disabled
+	$TEST = get-Service EFS
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 If ($EAPService -eq "True")
 {
     Write-Host "Disabling Extensible Authentication Protocol Service..." -ForegroundColor Yellow
     Set-Service Eaphost -StartupType Disabled
+	$TEST = get-Service Eaphost
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 Write-Host "Disabling Fax Service..." -ForegroundColor Cyan
 Set-Service Fax -StartupType Disabled
-
+$TEST = get-Service Fax
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Function Discovery Resource Publication Service..." -ForegroundColor Cyan
 Set-Service FDResPub -StartupType Disabled
-
+$TEST = get-Service FDResPub
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 If ($FileHistoryService -eq "True")
 {
     Write-Host "Disabling File History Service..." -ForegroundColor Yellow
     Set-Service fhsvc -StartupType Disabled
+	$TEST = get-Service fhsvc
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 Write-Host "Disabling Geolocation Service..." -ForegroundColor Cyan
 Set-Service lfsvc -StartupType Disabled
-
+$TEST = get-Service lfsvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Home Group Listener Service..." -ForegroundColor Cyan
 Set-Service HomeGroupListener -StartupType Disabled
-
+$TEST = get-Service HomeGroupListener
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Home Group Provider Service..." -ForegroundColor Cyan
 Set-Service HomeGroupProvider -StartupType Disabled
-
+$TEST = get-Service HomeGroupProvider
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Infrared Monitoring Service..." -ForegroundColor Cyan
 Set-Service irmon -StartupType Disabled
-
+$TEST = get-Service irmon
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Internet Connection Sharing (ICS) Service..." -ForegroundColor Cyan
 Set-Service SharedAccess -StartupType Disabled
-
+$TEST = get-Service SharedAccess
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 If ($MSSignInService -eq "True")
 {
     Write-Host "Disabling Microsoft Account Sign-in Assistant Service..." -ForegroundColor Yellow
     Set-Service wlidsvc -StartupType Disabled
+	$TEST = get-Service wlidsvc
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 If ($iSCSI -eq "True")
 {
     Write-Host "Disabling Microsoft iSCSI Initiator Service..." -ForegroundColor Yellow
     Set-Service MSiSCSI -StartupType Disabled
+	$TEST = get-Service MSiSCSI
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 Write-Host "Disabling Microsoft Software Shadow Copy Provider Service..." -ForegroundColor Cyan
 Set-Service swprv -StartupType Disabled
-
+$TEST = get-Service swprv
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Microsoft Storage Spaces SMP Service..." -ForegroundColor Cyan
 Set-Service smphost -StartupType Disabled
-
+$TEST = get-Service smphost
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Offline Files Service..." -ForegroundColor Cyan
 Set-Service CscService -StartupType Disabled
-
+$TEST = get-Service CscService
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Optimize drives Service..." -ForegroundColor Cyan
 Set-Service defragsvc -StartupType Disabled
-
+$TEST = get-Service defragsvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Payments and NFC/SE Manager Service..." -ForegroundColor Cyan
 Set-Service SEMgrSvc -StartupType Disabled
-
+$TEST = get-Service SEMgrSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Phone Service..." -ForegroundColor Cyan
 Set-Service PhoneSvc -StartupType Disabled
-
+$TEST = get-Service PhoneSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Program Compatibility Assistant Service..." -ForegroundColor Cyan
 Set-Service PcaSvc -StartupType Disabled
-
+$TEST = get-Service PcaSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Quality Windows Audio Video Experience Service..." -ForegroundColor Cyan
 Set-Service QWAVE -StartupType Disabled
-
+$TEST = get-Service QWAVE
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Radio Management Service..." -ForegroundColor Cyan
 Set-Service RmSvc -StartupType Disabled
-
+$TEST = get-Service RmSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Retail Demo Service..." -ForegroundColor Cyan
 Set-Service RetailDemo -StartupType Disabled
-
+$TEST = get-Service RetailDemo
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Secure Socket Tunneling Protocol Service..." -ForegroundColor Cyan
 Set-Service SstpSvc -StartupType Disabled
-
+$TEST = get-Service SstpSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Sensor Data Service..." -ForegroundColor Cyan
 Set-Service SensorDataService -StartupType Disabled
-
+$TEST = get-Service SensorDataService
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Sensor Monitoring Service..." -ForegroundColor Cyan
 Set-Service SensrSvc -StartupType Disabled
-
+$TEST = get-Service SensrSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Sensor Service..." -ForegroundColor Cyan
 Set-Service SensorService -StartupType Disabled
-
+$TEST = get-Service SensorService
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Shell Hardware Detection Service..." -ForegroundColor Cyan
 Set-Service ShellHWDetection -StartupType Disabled
-
+$TEST = get-Service ShellHWDetection
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling SNMP Trap Service..." -ForegroundColor Cyan
 Set-Service SNMPTRAP -StartupType Disabled
-
+$TEST = get-Service SNMPTRAP
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Spot Verifier Service..." -ForegroundColor Cyan
 Set-Service svsvc -StartupType Disabled
-
+$TEST = get-Service svsvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling SSDP Discovery Service..." -ForegroundColor Cyan
 Set-Service SSDPSRV -StartupType Disabled
-
+$TEST = get-Service SSDPSRV
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Still Image Acquisition Events Service..." -ForegroundColor Cyan
 Set-Service WiaRpc -StartupType Disabled
-
+$TEST = get-Service WiaRpc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Superfetch Service..." -ForegroundColor Cyan
 Set-Service SysMain -StartupType Disabled
-
+$TEST = get-Service SysMain
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Telephony Service..." -ForegroundColor Cyan
 Set-Service TapiSrv -StartupType Disabled
-
+$TEST = get-Service TapiSrv
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 If ($Themes -eq "True")
 {
     Write-Host "Disabling Themes Service..." -ForegroundColor Yellow
     Set-Service Themes -StartupType Disabled
+	$TEST = get-Service Themes
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 If ($Touch -eq "True")
 {
     Write-Host "Disabling Touch Keyboard and Handwriting Panel Service..." -ForegroundColor Yellow
     Set-Service TabletInputService -StartupType Disabled
+	$TEST = get-Service TabletInputService
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 Write-Host "Disabling UPnP Device Host Service..." -ForegroundColor Cyan
 Set-Service upnphost -StartupType Disabled
-
+$TEST = get-Service upnphost
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Volume Shadow Copy Service..." -ForegroundColor Cyan
 Set-Service VSS -StartupType Disabled
-
+$TEST = get-Service VSS
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Wi-Fi Direct Services Connection Manager Service..." -ForegroundColor Cyan
 Set-Service WFDSConMgrSvc -StartupType Disabled
-
+$TEST = get-Service WFDSConMgrSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Windows Color System Service..." -ForegroundColor Cyan
 Set-Service WcsPlugInService -StartupType Disabled
-
+$TEST = get-Service WcsPlugInService
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Windows Connect Now - Config Registrar Service..." -ForegroundColor Cyan
 Set-Service wcncsvc -StartupType Disabled
-
+$TEST = get-Service wcncsvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Windows Error Reporting Service..." -ForegroundColor Cyan
 Set-Service WerSvc -StartupType Disabled
-
+$TEST = get-Service WerSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Windows Image Acquisition (WIA) Service..." -ForegroundColor Cyan
 Set-Service stisvc -StartupType Disabled
-
+$TEST = get-Service stisvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Windows Media Player Network Sharing Service..." -ForegroundColor Cyan
 Set-Service WMPNetworkSvc -StartupType Disabled
-
+$TEST = get-Service WMPNetworkSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Windows Mobile Hotspot Service..." -ForegroundColor Cyan
 Set-Service icssvc -StartupType Disabled
-
+$TEST = get-Service icssvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 If ($Search -eq "True")
 {
     Write-Host "Disabling Windows Search Service..." -ForegroundColor Yellow
     Set-Service WSearch -StartupType Disabled
+	$TEST = get-Service WSearch
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 If ($WindowsUpdate -eq "True")
 {
     Write-Host "Disabling Windows Update Service..." -ForegroundColor Yellow
     Set-Service wuauserv -StartupType Disabled
+	$TEST = get-Service wuauserv
+	if ($TEST.starttype -eq "disabled")
+		{write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 }
 
 Write-Host "Disabling WLAN AutoConfig Service..." -ForegroundColor Cyan
 Set-Service WlanSvc -StartupType Disabled
-
+$TEST = get-Service WlanSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling WWAN AutoConfig Service..." -ForegroundColor Cyan
 Set-Service WwanSvc -StartupType Disabled
-
+$TEST = get-Service WwanSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Xbox Accessory Management Service..." -ForegroundColor Cyan
 Set-Service XboxGipSvc -StartupType Disabled
-
+$TEST = get-Service XboxGipSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Xbox Game Monitoring Service..." -ForegroundColor Cyan
 Set-Service xbgm -StartupType Disabled
-
+$TEST = get-Service xbgm
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Xbox Live Auth Manager Service..." -ForegroundColor Cyan
 Set-Service XblAuthManager -StartupType Disabled
-
+$TEST = get-Service XblAuthManager
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Xbox Live Game Save Service..." -ForegroundColor Cyan
 Set-Service XblGameSave -StartupType Disabled
-
+$TEST = get-Service XblGameSave
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
+	
 Write-Host "Disabling Xbox Live Networking Service Service..." -ForegroundColor Cyan
 Set-Service XboxNetApiSvc -StartupType Disabled
+$TEST = get-Service XboxNetApiSvc
+if ($TEST.starttype -eq "disabled")
+    {write-host $TEST.DisplayName "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "is still enabled" -ForegroundColor Red}
 Write-Host ""
 
 
@@ -797,6 +1188,11 @@ Write-Host ""
 Write-Host "Configuring Network List Service to start Automatic..." -ForegroundColor Green
 Write-Host ""
 Set-Service netprofm -StartupType Automatic
+$TEST = get-Service netprofm
+if ($TEST.starttype -eq "automatic")
+    {write-host $TEST.DisplayName "has been set to Automatic" -ForegroundColor Green}
+    else
+    {write-host $TEST.DisplayName "was not been set to Automatic" -ForegroundColor Red}
 Write-Host ""
 
 Write-Host "Configuring Windows Update Service to run in standalone svchost..." -ForegroundColor Cyan
@@ -821,31 +1217,189 @@ Write-Host ""
 Write-Host "Disabling Scheduled Tasks..." -ForegroundColor Cyan
 Write-Host ""
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Autochk\Proxy" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Autochk\" -TaskName "Proxy"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Bluetooth\UninstallDeviceTask" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Bluetooth\" -TaskName "UninstallDeviceTask"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Defrag\ScheduledDefrag" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Defrag\" -TaskName "ScheduledDefrag"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Diagnosis\Scheduled" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Diagnosis\" -TaskName "Scheduled"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\DiskDiagnostic\" -TaskName "Microsoft-Windows-DiskDiagnosticDataCollector"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticResolver" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\DiskDiagnostic\" -TaskName "Microsoft-Windows-DiskDiagnosticResolver"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Location\Notifications" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Location\" -TaskName "Notifications"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Maintenance\WinSAT" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Maintenance\" -TaskName "WinSAT"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Maps\MapsToastTask" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Maps\" -TaskName "MapsToastTask"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Maps\MapsUpdateTask" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Maps\" -TaskName "MapsUpdateTask"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\MemoryDiagnostic\ProcessMemoryDiagnosticEvents" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\MemoryDiagnostic\" -TaskName "ProcessMemoryDiagnosticEvents"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\MemoryDiagnostic\RunFullMemoryDiagnostic" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\MemoryDiagnostic\" -TaskName "RunFullMemoryDiagnostic"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Mobile Broadband Accounts\MNO Metadata Parser" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Mobile Broadband Accounts\" -TaskName "MNO Metadata Parser"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Power Efficiency Diagnostics\" -TaskName "AnalyzeSystem"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Ras\MobilityManager" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Ras\" -TaskName "MobilityManager"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\RecoveryEnvironment\VerifyWinRE" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\RecoveryEnvironment\" -TaskName "VerifyWinRE"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Registry\RegIdleBackup" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Registry\" -TaskName "RegIdleBackup"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
+If ($OS -le 1709)
+	{
+	Disable-ScheduledTask -TaskName "\Microsoft\Windows\RetailDemo\CleanupOfflineContent" | Out-Null
+	$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\RetailDemo\" -TaskName "CleanupOfflineContent"
+	if ($TEST.state -eq "Disabled")
+		{write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+		else
+		{write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Shell\FamilySafetyMonitor" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Shell\" -TaskName "FamilySafetyMonitor"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Shell\FamilySafetyRefreshTask" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Shell\" -TaskName "FamilySafetyRefreshTask"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\SystemRestore\SR" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\SystemRestore\" -TaskName "SR"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\UPnP\UPnPHostConfig" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\UPnP\" -TaskName "UPnPHostConfig"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\WDI\ResolutionHost" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\WDI\" -TaskName "ResolutionHost"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\Windows Media Sharing\UpdateLibrary" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\Windows Media Sharing\" -TaskName "UpdateLibrary"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\WOF\WIM-Hash-Management" | Out-Null
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\WOF\" -TaskName "WIM-Hash-Management"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
+	
 Disable-ScheduledTask -TaskName "\Microsoft\Windows\WOF\WIM-Hash-Validation" | Out-Null
-
+$TEST = get-ScheduledTask -TaskPath "\Microsoft\Windows\WOF\" -TaskName "WIM-Hash-Validation"
+if ($TEST.state -eq "Disabled")
+    {write-host $TEST.URI "has been disabled" -ForegroundColor Green}
+    else
+    {write-host $TEST.URI "was not disabled" -ForegroundColor Red}
 
 # Disable Hard Disk Timeouts:
 Write-Host "Disabling Hard Disk Timeouts..." -ForegroundColor Yellow
@@ -864,7 +1418,11 @@ POWERCFG -h off
 Write-Host "Disabling TCP Large Send Offload..." -ForegroundColor Green
 Write-Host ""
 New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters -Name 'DisableTaskOffload' -PropertyType DWORD -Value '1' | Out-Null
-
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters").GetValue('DisableTaskOffload')
+if ($TEST -eq "1")
+    {write-host "Large Send Offload has been disabled" -ForegroundColor Green}
+    else
+    {write-host "Large Send Offload is still enabled" -ForegroundColor Red}
 
 # Disable System Restore
 Write-Host "Disabling System Restore..." -ForegroundColor Green
@@ -883,29 +1441,67 @@ If ($MachPass -eq "True")
     Write-Host "Disabling Machine Account Password Changes..." -ForegroundColor Yellow
     Write-Host ""
     Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'DisablePasswordChange' -Value '1'
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters").GetValue('DisablePasswordChange')
+		if ($TEST -eq "1")
+		{write-host "Machine Account Password Changes have been disabled" -ForegroundColor Green}
+		else
+		{write-host "Machine Account Password Changes are still enabled" -ForegroundColor Red}
 }
 
 
 # Disable Memory Dumps
 Write-Host "Disabling Memory Dump Creation..." -ForegroundColor Green
 Write-Host ""
-Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name 'CrashDumpEnabled' -Value '1'
+Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name 'CrashDumpEnabled' -Value '0'
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl").GetValue('CrashDumpEnabled')
+	if ($TEST -eq "1")
+	{write-host "Memory dump creation has been disabled" -ForegroundColor Green}
+	else
+	{write-host "Memory dump creation is still enabled" -ForegroundColor Red}
+	
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name 'LogEvent' -Value '0'
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl").GetValue('LogEvent')
+	if ($TEST -eq "0")
+	{write-host "Memory dump log event creation has been disabled" -ForegroundColor Green}
+	else
+	{write-host "Memory dump log event creation is still enabled" -ForegroundColor Red}
+	
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name 'SendAlert' -Value '0'
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl").GetValue('SendAlert')
+	if ($TEST -eq "0")
+	{write-host "Memory dump SNMP alert has been disabled" -ForegroundColor Green}
+	else
+	{write-host "Memory dump SNMP alert is still enabled" -ForegroundColor Red}
+	
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl' -Name 'AutoReboot' -Value '1'
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl").GetValue('AutoReboot')
+	if ($TEST -eq "1")
+	{write-host "Memory dump autoreboot has been enabled" -ForegroundColor Green}
+	else
+	{write-host "Memory dump autoreboot is not enabled" -ForegroundColor Red}
 
 
 # Increase Service Startup Timeout:
 Write-Host "Increasing Service Startup Timeout To 180 Seconds..." -ForegroundColor Yellow
 Write-Host ""
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -Value '180000'
-
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control").GetValue('ServicesPipeTimeout')
+	if ($TEST -eq "180000")
+	{write-host "Service Startup Timeout has been increased to 180 Seconds" -ForegroundColor Green}
+	else
+	{write-host "Service Startup Timeout was not increased" -ForegroundColor Red}
+	
 
 # Increase Disk I/O Timeout to 200 Seconds:
 Write-Host "Increasing Disk I/O Timeout to 200 Seconds..." -ForegroundColor Green
 Write-Host ""
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Disk' -Name 'TimeOutValue' -Value '200'
-
+$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\Disk").GetValue('TimeOutValue')
+	if ($TEST -eq "200")
+	{write-host "Disk I/O Timeout has been increased to 200 Seconds" -ForegroundColor Green}
+	else
+	{write-host "Disk I/O Timeout was not increased" -ForegroundColor Red}
+	
 
 # Disable IE First Run Wizard:
 Write-Host "Disabling IE First Run Wizard..." -ForegroundColor Green
@@ -913,13 +1509,23 @@ Write-Host ""
 New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft' -Name 'Internet Explorer' | Out-Null
 New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer' -Name 'Main' | Out-Null
 New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main' -Name DisableFirstRunCustomize -PropertyType DWORD -Value '1' | Out-Null
-
+$TEST = (Get-Item "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main").GetValue('DisableFirstRunCustomize')
+	if ($TEST -eq "1")
+	{write-host "IE First Run Wizard was successfully disabled" -ForegroundColor Green}
+	else
+	{write-host "IE First Run Wizard was not disabled" -ForegroundColor Red}
+	
 
 # Disable New Network Dialog:
 Write-Host "Disabling New Network Dialog..." -ForegroundColor Green
 Write-Host ""
 New-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Network' -Name 'NewNetworkWindowOff' | Out-Null
-
+$TEST = (test-path HKLM:\SYSTEM\CurrentControlSet\Control\Network\newnetworkwindowoff)
+	if ($TEST -eq "true")
+	{write-host "IE First Run Wizard was successfully disabled" -ForegroundColor Green}
+	else
+	{write-host "IE First Run Wizard was not disabled" -ForegroundColor Red}
+	
 
 # Modify SMB defaults
 If ($SMB1 -eq "True")
@@ -937,12 +1543,54 @@ If ($SMBPerf -eq "True")
     Write-Host "Changing SMB Parameters..."
     Write-Host ""
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'DisableBandwidthThrottling' -PropertyType DWORD -Value '1' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('DisableBandwidthThrottling')
+	if ($TEST -eq "1")
+	{write-host "SMB Bandwidth Throttling was successfully disabled" -ForegroundColor Green}
+	else
+	{write-host "SMB Bandwidth Throttling was not disabled" -ForegroundColor Red}
+	
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'DisableLargeMtu' -PropertyType DWORD -Value '0' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('DisableLargeMtu')
+	if ($TEST -eq "0")
+	{write-host "SMB Large MTU's were successfully enabled" -ForegroundColor Green}
+	else
+	{write-host "SMB Large MTU's were not enabled" -ForegroundColor Red}
+	
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'FileInfoCacheEntriesMax' -PropertyType DWORD -Value '8000' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('FileInfoCacheEntriesMax')
+	if ($TEST -eq "8000")
+	{write-host "SMB File Entry Cache was successfully increased" -ForegroundColor Green}
+	else
+	{write-host "SMB File Entry Cache was not increased" -ForegroundColor Red}
+	
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'DirectoryCacheEntriesMax' -PropertyType DWORD -Value '1000' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('DirectoryCacheEntriesMax')
+	if ($TEST -eq "1000")
+	{write-host "SMB Directory Cache was successfully increased" -ForegroundColor Green}
+	else
+	{write-host "SMB Directory Cache was not increased" -ForegroundColor Red}
+	
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'FileNotFoundcacheEntriesMax' -PropertyType DWORD -Value '1' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('FileNotFoundcacheEntriesMax')
+	if ($TEST -eq "1")
+	{write-host "SMB File Not Found Cache was successfully configured" -ForegroundColor Green}
+	else
+	{write-host "SMB File Not Found Cache was not configured" -ForegroundColor Red}
+	
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'MaxCmds' -PropertyType DWORD -Value '8000' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('MaxCmds')
+	if ($TEST -eq "8000")
+	{write-host "SMB Max Commands Cache was successfully configured" -ForegroundColor Green}
+	else
+	{write-host "SMB Max Commands Cache was not configured" -ForegroundColor Red}
+	
     New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'EnableWsd' -PropertyType DWORD -Value '0' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters").GetValue('EnableWsd')
+	if ($TEST -eq "0")
+	{write-host "SMB WSD was successfully disabled" -ForegroundColor Green}
+	else
+	{write-host "SMB WSD was not disabled" -ForegroundColor Red}
+
 }
 
 
@@ -952,45 +1600,104 @@ If ($TLS10 -eq "True")
     Write-Host "Disabling TLS 1.0..." -ForegroundColor Yellow
     Write-Host ""
 	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'Enabled' -PropertyType DWORD -Value '0' | Out-Null
-
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client").GetValue('Enabled')
+		if ($TEST -eq "0")
+		{write-host "TLS 1.0 Client was successfully disabled" -ForegroundColor Green}
+		else
+		{write-host "TLS 1.0 Client was not disabled" -ForegroundColor Red}
+		
 	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'DisabledByDefault' -PropertyType DWORD -Value '1' | Out-Null
-
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client").GetValue('DisabledByDefault')
+		if ($TEST -eq "1")
+		{write-host "TLS 1.0 Client was successfully disabled by default" -ForegroundColor Green}
+		else
+		{write-host "TLS 1.0 Client was not disabled by default" -ForegroundColor Red}
+		
 	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'Enabled' -PropertyType DWORD -Value '0' | Out-Null
-
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server").GetValue('Enabled')
+		if ($TEST -eq "0")
+		{write-host "TLS 1.0 Server was successfully disabled" -ForegroundColor Green}
+		else
+		{write-host "TLS 1.0 Server was not disabled" -ForegroundColor Red}
+		
 	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'DisabledByDefault' -PropertyType DWORD -Value '1' | Out-Null
+	$TEST = (Get-Item "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server").GetValue('DisabledByDefault')
+		if ($TEST -eq "1")
+		{write-host "TLS 1.0 Server was successfully disabled by default" -ForegroundColor Green}
+		else
+		{write-host "TLS 1.0 Client was not disabled by default" -ForegroundColor Red}
+	
 }
+
 
 # Remove Previous Versions:
 Write-Host "Removing Previous Versions Capability..." -ForegroundColor Yellow
 Write-Host ""
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\\Microsoft\Windows\CurrentVersion\Explorer' -Name 'NoPreviousVersionsPage' -Value '1'
+$TEST = (Get-Item "HKLM:\SOFTWARE\\Microsoft\Windows\CurrentVersion\Explorer").GetValue('NoPreviousVersionsPage')
+	if ($TEST -eq "1")
+	{write-host "Previous Versions Capability has been successfully disabled" -ForegroundColor Green}
+	else
+	{write-host "Previous Versions Capability was not disabled" -ForegroundColor Red}
 
-
+	
 # Change Explorer Default View:
 Write-Host "Configuring Windows Explorer..." -ForegroundColor Green
 Write-Host ""
 New-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'LaunchTo' -PropertyType DWORD -Value '1' | Out-Null
-
+$TEST = (Get-Item "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced").GetValue('LaunchTo')
+	if ($TEST -eq "1")
+	{write-host "Windows Explorer LaunchTo was successfully configured" -ForegroundColor Green}
+	else
+	{write-host "Windows Explorer LaunchTo was not configured" -ForegroundColor Red}
+	
 
 # Configure Search Options:
 Write-Host "Configuring Search Options..." -ForegroundColor Green
 Write-Host ""
 New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -PropertyType DWORD -Value '0' | Out-Null
+$TEST = (Get-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search").GetValue('AllowSearchToUseLocation')
+	if ($TEST -eq "0")
+	{write-host "Windows Search was successfully configured to block location checking" -ForegroundColor Green}
+	else
+	{write-host "Windows Search was not configured to block location checking" -ForegroundColor Red}
+	
 New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'ConnectedSearchUseWeb' -PropertyType DWORD -Value '0' | Out-Null
+$TEST = (Get-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search").GetValue('ConnectedSearchUseWeb')
+	if ($TEST -eq "0")
+	{write-host "Windows Search was successfully configured to block web searching" -ForegroundColor Green}
+	else
+	{write-host "Windows Search was not configured to block web searching" -ForegroundColor Red}
+	
 New-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -PropertyType DWORD -Value '1' | Out-Null
+$TEST = (Get-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search").GetValue('SearchboxTaskbarMode')
+	if ($TEST -eq "1")
+	{write-host "Windows Search was successfully configured to allow searching in task bar mode" -ForegroundColor Green}
+	else
+	{write-host "Windows Search was not configured to allow searching in task bar mode" -ForegroundColor Red}
 
 
 # Use Solid Background Color:
 Write-Host "Configuring Winlogon..." -ForegroundColor Green
 Write-Host ""
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'DisableLogonBackgroundImage' -Value '1'
-
+$TEST = (Get-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System").GetValue('DisableLogonBackgroundImage')
+	if ($TEST -eq "1")
+	{write-host "WinLogon was successfully configured to use a solid background color" -ForegroundColor Green}
+	else
+	{write-host "WinLogon was not configured to use a solid background color" -ForegroundColor Red}
+	
 
 # DisableTransparency:
 Write-Host "Removing Transparency Effects..." -ForegroundColor Green
 Write-Host ""
 Set-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name 'EnableTransparency' -Value '0'
-
+$TEST = (Get-Item "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize").GetValue('EnableTransparency')
+	if ($TEST -eq "0")
+	{write-host "Transparency effects were successfully disabled" -ForegroundColor Green}
+	else
+	{write-host "Transparency effects were not disabled" -ForegroundColor Red}
+	
 
 # Enable RDP:
 $RDP = Get-WmiObject -Class Win32_TerminalServiceSetting -Namespace root\CIMV2\TerminalServices -Authentication PacketPrivacy
